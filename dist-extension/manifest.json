@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "Workflow AI",
+  "version": "1.0.0",
+  "description": "AI-powered workflow automation with n8n integration",
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    },
+    "default_title": "Workflow AI"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "contextMenus",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.googleapis.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "assets/background.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["assets/content.js"],
+      "css": ["assets/content.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "commands": {
+    "open-popup": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+W",
+        "mac": "Command+Shift+W"
+      },
+      "description": "Open Workflow AI popup"
+    },
+    "generate-workflow": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+G",
+        "mac": "Command+Shift+G"
+      },
+      "description": "Generate workflow from selected text"
+    }
+  },
+  "options_page": "popup.html#settings",
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/*", "popup.html"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

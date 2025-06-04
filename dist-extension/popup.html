@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workflow AI</title>
+  <link rel="stylesheet" href="assets/popup.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Workflow AI</h1>
+      <div class="theme-toggle">
+        <button id="themeToggle">
+          <i class="fas fa-moon"></i>
+        </button>
+      </div>
+    </header>
+
+    <div class="tabs">
+      <button class="tab-button active" data-tab="generate">Generate</button>
+      <button class="tab-button" data-tab="templates">Templates</button>
+      <button class="tab-button" data-tab="history">History</button>
+      <button class="tab-button" data-tab="settings">Settings</button>
+    </div>
+
+    <div class="tab-content">
+      <!-- Generate Tab -->
+      <div id="generate" class="tab-pane active">
+        <div class="form-group">
+          <label for="workflowPrompt">Describe your workflow:</label>
+          <textarea id="workflowPrompt" rows="4" placeholder="E.g., Create a workflow that..."></textarea>
+        </div>
+        <div class="form-group">
+          <label for="workflowComplexity">Complexity:</label>
+          <select id="workflowComplexity">
+            <option value="simple">Simple</option>
+            <option value="moderate" selected>Moderate</option>
+            <option value="complex">Complex</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="model">Model:</label>
+          <select id="model">
+            <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+            <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+          </select>
+        </div>
+        <button id="generateBtn" class="btn btn-primary">Generate Workflow</button>
+        <div id="generationStatus" class="status-message"></div>
+      </div>
+
+      <!-- Templates Tab -->
+      <div id="templates" class="tab-pane">
+        <div class="search-container">
+          <input type="text" id="templateSearch" placeholder="Search templates...">
+          <button id="newTemplateBtn" class="btn btn-secondary">New Template</button>
+        </div>
+        <div id="templatesList" class="templates-list">
+          <!-- Templates will be dynamically inserted here -->
+        </div>
+      </div>
+
+      <!-- History Tab -->
+      <div id="history" class="tab-pane">
+        <div class="history-actions">
+          <button id="clearHistoryBtn" class="btn btn-danger">Clear History</button>
+        </div>
+        <div id="historyList" class="history-list">
+          <!-- History items will be dynamically inserted here -->
+        </div>
+      </div>
+
+      <!-- Settings Tab -->
+      <div id="settings" class="tab-pane">
+        <div class="form-group">
+          <label for="apiKey">Gemini API Key:</label>
+          <div class="input-with-icon">
+            <input type="password" id="apiKey" placeholder="Enter your Gemini API key">
+            <button id="toggleApiKey" class="icon-button" type="button">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+          <button id="testConnectionBtn" class="btn btn-secondary">Test Connection</button>
+        </div>
+        
+        <div class="form-group">
+          <label for="n8nUrl">n8n URL:</label>
+          <input type="url" id="n8nUrl" placeholder="https://your-n8n-instance.com">
+        </div>
+        
+        <div class="form-group">
+          <label for="n8nApiKey">n8n API Key:</label>
+          <div class="input-with-icon">
+            <input type="password" id="n8nApiKey" placeholder="Enter your n8n API key">
+            <button id="toggleN8nApiKey" class="icon-button" type="button">
+              <i class="fas fa-eye"></i>
+            </button>
+          </div>
+          <button id="testN8nBtn" class="btn btn-secondary">Test n8n Connection</button>
+          <div id="connectionStatus" class="status-message"></div>
+        </div>
+        
+        <div class="form-group">
+          <label>Data Management:</label>
+          <button id="exportDataBtn" class="btn btn-secondary">Export Data</button>
+          <div class="file-input-container">
+            <label for="importDataInput" class="btn btn-secondary">Import Data</label>
+            <input type="file" id="importDataInput" accept=".json" style="display: none;">
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="themeSelect">Theme:</label>
+          <select id="themeSelect">
+            <option value="system">System Default</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/popup.js"></script>
+</body>
+</html>
