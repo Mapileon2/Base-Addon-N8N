@@ -8,14 +8,18 @@ class WorkflowAIApp {
       n8nApiKey: ''
     };
     this.history = [];
+    this.templates = [];
     this.notificationTimeout = null;
     this.loadingTimeout = null;
+    this.exportDataBtn = document.getElementById('exportDataBtn');
   }
 
-  // Initialize the app
   async initialize() {
     try {
       console.log('Initializing app...');
+      
+      // Initialize templates array
+      this.templates = [];
       
       // Cache DOM elements first
       this.cacheElements();
@@ -23,11 +27,17 @@ class WorkflowAIApp {
       // Bind events early to capture all interactions
       this.bindEvents();
       
-      // Load settings
-      await this.loadSettings();
+      // Load settings and templates
+      await Promise.all([
+        this.loadSettings(),
+        this.loadTemplates()
+      ]);
       
       // Apply theme
       this.applyTheme();
+      
+      // Render templates
+      this.renderTemplates();
       
       // Initialize connection status
       this.initConnectionStatus();
@@ -190,74 +200,110 @@ class WorkflowAIApp {
 
   // Bind button events
   bindButtons() {
+    // Tab buttons
+    document.querySelectorAll('.tab-button').forEach(button => {
+      button.addEventListener('click', (e) => {
+        const tabId = e.target.getAttribute('data-tab');
+        if (tabId) {
+          this.switchTab(tabId);
+          
+          // If switching to templates tab, ensure templates are rendered
+          if (tabId === 'templates') {
+            this.renderTemplates();
+          }
+        }
+      });
+    });
+    
+    // Generate button
+    const generateBtn = document.getElementById('generateBtn');
+    if (generateBtn) {
+      generateBtn.addEventListener('click', () => this.generateWorkflow());
+    }
+    
+    // Test connection button
+    const testConnectionBtn = document.getElementById('testConnection');
+    if (testConnectionBtn) {
+      testConnectionBtn.addEventListener('click', () => this.testConnection());
+    }
+    
+    // Test n8n connection button
+    const testN8nConnectionBtn = document.getElementById('testN8nConnection');
+    if (testN8nConnectionBtn) {
+      testN8nConnectionBtn.addEventListener('click', () => this.testN8nConnection());
+    }
+    
+    // Save settings button
+    const saveSettingsBtn = document.getElementById('saveSettings');
+    if (saveSettingsBtn) {
+      saveSettingsBtn.addEventListener('click', () => this.saveSettings());
+    }
+    
+    // Clear history button
+    const clearHistoryBtn = document.getElementById('clearHistory');
+    if (clearHistoryBtn) {
+      clearHistoryBtn.addEventListener('click', () => this.clearHistory());
+    }
+    
+    // Export data button
+    const exportDataBtn = document.getElementById('exportData');
+    if (exportDataBtn) {
+      exportDataBtn.addEventListener('click', () => this.exportData());
+    }
+    
+    // Import data button
+    const importDataBtn = document.getElementById('importData');
+    if (importDataBtn) {
+      importDataBtn.addEventListener('change', (e) => this.importData(e));
+    }
+    
+    // Toggle password visibility
+    const togglePasswordBtns = document.querySelectorAll('.toggle-password');
+    togglePasswordBtns.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const input = e.target.previousElementSibling;
+        const type = input.type === 'password' ? 'text' : 'password';
+        input.type = type;
+        e.target.classList.toggle('fa-eye');
+        e.target.classList.toggle('fa-eye-slash');
+      });
+    });
+    
+    // Theme toggle
+    const themeToggle = document.getElementById('themeToggle');
+    if (themeToggle) {
+      themeToggle.addEventListener('change', (e) => {
+        this.toggleTheme(e.target.checked);
+      });
+    }
+    
+    // New template button
+    const newTemplateBtn = document.getElementById('newTemplateBtn');
+    if (newTemplateBtn) {
+      newTemplateBtn.addEventListener('click', () => {
+        this.showTemplateModal();
+      });
+    }
+    
+    // Template search input
+    const templateSearch = document.getElementById('templateSearch');
+    if (templateSearch) {
+      templateSearch.addEventListener('input', (e) => {
+        this.filterTemplates(e.target.value);
+      });
+    }
+    
+    // Handle click on create first template button (in empty state)
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.id === 'createFirstTemplate') {
+        this.showTemplateModal();
+      }
+    });
+  }
+  
+  // Bind button events
+  bindButtons() {
     try {
-      console.log('Binding buttons...');
-      
-      // Generate workflow button
-      const generateBtn = document.getElementById('generateBtn');
-      if (generateBtn) {
-        console.log('Found generate button');
-        generateBtn.addEventListener('click', (e) => {
-          console.log('Generate button clicked');
-          e.preventDefault();
-          this.generateWorkflow();
-        });
-      } else {
-        console.warn('Generate button not found');
-      }
-      
-      // Test connection buttons
-      const testConnectionBtn = document.getElementById('testConnectionBtn');
-      if (testConnectionBtn) {
-        console.log('Found test connection button');
-        testConnectionBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('Test connection button clicked');
-          this.testConnection();
-        });
-      } else {
-        console.warn('Test connection button not found');
-      }
-      
-      const testN8nBtn = document.getElementById('testN8nBtn');
-      if (testN8nBtn) {
-        console.log('Found test n8n button');
-        testN8nBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('Test n8n button clicked');
-          this.testN8nConnection();
-        });
-      } else {
-        console.warn('Test n8n button not found');
-      }
-      
-      // Clear history button
-      const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-      if (clearHistoryBtn) {
-        console.log('Found clear history button');
-        clearHistoryBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('Clear history button clicked');
-          this.clearHistory();
-        });
-      } else {
-        console.warn('Clear history button not found');
-      }
-      
-      // New template button
-      const newTemplateBtn = document.getElementById('newTemplateBtn');
-      if (newTemplateBtn) {
-        console.log('Found new template button');
-        newTemplateBtn.addEventListener('click', (e) => {
-          e.preventDefault();
-          console.log('New template button clicked');
-          // Implement template creation
-          this.showNotification('Template creation not implemented yet', 'info');
-        });
-      } else {
-        console.warn('New template button not found');
-      }
-      
       // Export/Import buttons
       const exportDataBtn = document.getElementById('exportDataBtn');
       if (exportDataBtn) {
@@ -981,6 +1027,404 @@ class WorkflowAIApp {
       console.error('Error deleting workflow:', error);
       this.showNotification('Failed to delete workflow', 'error');
     }
+  }
+
+  // Load settings from storage
+  async loadSettings() {
+    try {
+      const data = await new Promise((resolve) => {
+        chrome.storage.local.get(
+          {
+            settings: {
+              theme: 'light',
+              apiKey: '',
+              n8nUrl: 'http://localhost:5678',
+              n8nApiKey: ''
+            },
+            workflowHistory: []
+          },
+          resolve
+        );
+      });
+      
+      this.settings = data.settings || {};
+      this.history = data.workflowHistory || [];
+      
+      // Update UI with loaded settings
+      this.updateUI();
+      
+      console.log('Settings loaded:', this.settings);
+      console.log('History loaded, items:', this.history.length);
+    } catch (error) {
+      console.error('Error loading settings:', error);
+      this.showNotification('Failed to load settings', 'error');
+    }
+  }
+  
+  // Load templates from storage
+  async loadTemplates() {
+    try {
+      const data = await new Promise((resolve) => {
+        chrome.storage.local.get({ templates: [] }, resolve);
+      });
+      
+      this.templates = data.templates || [];
+      console.log('Templates loaded:', this.templates.length);
+      return this.templates;
+    } catch (error) {
+      console.error('Error loading templates:', error);
+      this.showNotification('Failed to load templates', 'error');
+      return [];
+    }
+  }
+  
+  // Save templates to storage
+  async saveTemplates() {
+    try {
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ templates: this.templates }, resolve);
+      });
+      console.log('Templates saved');
+      return true;
+    } catch (error) {
+      console.error('Error saving templates:', error);
+      this.showNotification('Failed to save templates', 'error');
+      return false;
+    }
+  }
+  
+  // Show template modal for creating/editing templates
+  showTemplateModal(template = null) {
+    // Create or get the template modal
+    let modal = document.getElementById('templateModal');
+    
+    if (!modal) {
+      // Create modal if it doesn't exist
+      modal = document.createElement('div');
+      modal.id = 'templateModal';
+      modal.className = 'modal';
+      modal.innerHTML = `
+        <div class="modal-content">
+          <div class="modal-header">
+            <h3>${template ? 'Edit Template' : 'New Template'}</h3>
+            <span class="close-modal">&times;</span>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label for="templateName">Template Name</label>
+              <input type="text" id="templateName" class="form-control" placeholder="Enter template name" required>
+            </div>
+            <div class="form-group">
+              <label for="templateDescription">Description (optional)</label>
+              <textarea id="templateDescription" class="form-control" rows="3" placeholder="Enter a description for this template"></textarea>
+            </div>
+            <div class="form-group">
+              <label>
+                <input type="checkbox" id="includeWorkflow" checked>
+                Include current workflow configuration
+              </label>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" id="cancelTemplateBtn">Cancel</button>
+            <button class="btn btn-primary" id="saveTemplateBtn">${template ? 'Update' : 'Create'} Template</button>
+          </div>
+        </div>
+      `;
+      
+      // Add modal to the document
+      document.body.appendChild(modal);
+      
+      // Setup event listeners
+      const closeBtn = modal.querySelector('.close-modal');
+      const cancelBtn = modal.querySelector('#cancelTemplateBtn');
+      const saveBtn = modal.querySelector('#saveTemplateBtn');
+      
+      // Close modal when clicking the X or cancel button
+      const closeModal = () => {
+        modal.style.display = 'none';
+      };
+      
+      closeBtn.addEventListener('click', closeModal);
+      cancelBtn.addEventListener('click', closeModal);
+      
+      // Close when clicking outside the modal
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          closeModal();
+        }
+      });
+      
+      // Save template
+      saveBtn.addEventListener('click', () => {
+        this.saveTemplate(modal, template);
+      });
+    }
+    
+    // Pre-fill form if editing
+    if (template) {
+      modal.querySelector('#templateName').value = template.name || '';
+      modal.querySelector('#templateDescription').value = template.description || '';
+      
+      // Check if template has workflow data
+      if (template.workflow) {
+        modal.querySelector('#includeWorkflow').checked = true;
+      }
+    } else {
+      // Reset form for new template
+      modal.querySelector('#templateName').value = '';
+      modal.querySelector('#templateDescription').value = '';
+      modal.querySelector('#includeWorkflow').checked = true;
+    }
+    
+    // Show the modal
+    modal.style.display = 'block';
+    
+    // Focus the name field
+    modal.querySelector('#templateName').focus();
+  }
+  
+  // Save template to storage
+  async saveTemplate(modalElement, template = null) {
+    try {
+      const nameInput = modalElement.querySelector('#templateName');
+      const descriptionInput = modalElement.querySelector('#templateDescription');
+      const includeWorkflow = modalElement.querySelector('#includeWorkflow').checked;
+      
+      // Validate input
+      if (!nameInput.value.trim()) {
+        this.showNotification('Please enter a template name', 'error');
+        nameInput.focus();
+        return;
+      }
+      
+      // Create or update template
+      const now = new Date().toISOString();
+      const templateData = {
+        id: template?.id || `template-${Date.now()}`,
+        name: nameInput.value.trim(),
+        description: descriptionInput.value.trim(),
+        updatedAt: now,
+        createdAt: template?.createdAt || now
+      };
+      
+      // Include current workflow if checked
+      if (includeWorkflow) {
+        templateData.workflow = {
+          prompt: document.getElementById('workflowPrompt')?.value || '',
+          complexity: document.getElementById('workflowComplexity')?.value || 'moderate',
+          model: document.getElementById('model')?.value || 'gemini-1.5-flash'
+        };
+      } else if (template?.workflow) {
+        // Keep existing workflow data if not updating
+        templateData.workflow = template.workflow;
+      }
+      
+      // Update or add template
+      if (template) {
+        const index = this.templates.findIndex(t => t.id === template.id);
+        if (index !== -1) {
+          this.templates[index] = templateData;
+        } else {
+          this.templates.push(templateData);
+        }
+      } else {
+        this.templates.push(templateData);
+      }
+      
+      // Save to storage
+      await this.saveTemplates();
+      
+      // Update UI
+      this.renderTemplates();
+      
+      // Close modal
+      modalElement.style.display = 'none';
+      
+      // Show success message
+      this.showNotification(`Template "${templateData.name}" ${template ? 'updated' : 'created'} successfully`, 'success');
+      
+    } catch (error) {
+      console.error('Error saving template:', error);
+      this.showNotification('Failed to save template', 'error');
+    }
+  }
+  
+  // Render templates list
+  renderTemplates() {
+    const templatesList = document.getElementById('templatesList');
+    if (!templatesList) return;
+    
+    if (!this.templates || this.templates.length === 0) {
+      templatesList.innerHTML = `
+        <div class="empty-state">
+          <p>No templates found. Create your first template to get started!</p>
+          <button class="btn btn-primary" id="createFirstTemplate">Create New Template</button>
+        </div>
+      `;
+      
+      // Add event listener to the create button
+      document.getElementById('createFirstTemplate')?.addEventListener('click', () => {
+        this.showTemplateModal();
+      });
+      
+      return;
+    }
+    
+    // Sort templates by updatedAt (newest first)
+    const sortedTemplates = [...this.templates].sort((a, b) => 
+      new Date(b.updatedAt) - new Date(a.updatedAt)
+    );
+    
+    // Render templates
+    templatesList.innerHTML = sortedTemplates.map(template => `
+      <div class="template-item" data-id="${template.id}">
+        <div class="template-header">
+          <h4 class="template-title">${template.name}</h4>
+          <div class="template-actions">
+            <button class="btn-icon" data-action="edit" title="Edit">
+              <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn-icon" data-action="delete" title="Delete">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        </div>
+        ${template.description ? `
+          <div class="template-description">
+            ${template.description}
+          </div>
+        ` : ''}
+        <div class="template-footer">
+          <span class="template-date">
+            Updated ${new Date(template.updatedAt).toLocaleString()}
+          </span>
+          ${template.workflow ? `
+            <button class="btn btn-sm btn-primary" data-action="use">
+              Use Template
+            </button>
+          ` : ''}
+        </div>
+      </div>
+    `).join('');
+    
+    // Add event listeners
+    templatesList.querySelectorAll('.template-item').forEach(item => {
+      const templateId = item.dataset.id;
+      const template = this.templates.find(t => t.id === templateId);
+      if (!template) return;
+      
+      // Edit button
+      const editBtn = item.querySelector('[data-action="edit"]');
+      if (editBtn) {
+        editBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.showTemplateModal(template);
+        });
+      }
+      
+      // Delete button
+      const deleteBtn = item.querySelector('[data-action="delete"]');
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (confirm(`Are you sure you want to delete the template "${template.name}"?`)) {
+            this.deleteTemplate(template.id, item);
+          }
+        });
+      }
+      
+      // Use template button
+      const useBtn = item.querySelector('[data-action="use"]');
+      if (useBtn && template.workflow) {
+        useBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          this.useTemplate(template);
+        });
+      }
+      
+      // Click on template item to edit
+      item.addEventListener('click', (e) => {
+        // Only trigger if not clicking on a button or link
+        if (!e.target.closest('button, a, [data-action]')) {
+          this.showTemplateModal(template);
+        }
+      });
+    });
+  }
+  
+  // Delete a template
+  async deleteTemplate(templateId, element) {
+    try {
+      // Remove from array
+      this.templates = this.templates.filter(t => t.id !== templateId);
+      
+      // Save to storage
+      await this.saveTemplates();
+      
+      // Remove from UI with animation
+      if (element) {
+        element.style.opacity = '0';
+        setTimeout(() => {
+          element.remove();
+          
+          // If no more templates, show empty state
+          if (this.templates.length === 0) {
+            this.renderTemplates();
+          }
+        }, 300);
+      }
+      
+      this.showNotification('Template deleted', 'success');
+      
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      this.showNotification('Failed to delete template', 'error');
+    }
+  }
+  
+  // Use a template
+  useTemplate(template) {
+    if (!template.workflow) return;
+    
+    // Switch to generate tab
+    this.switchTab('generate');
+    
+    // Fill in the form
+    const promptInput = document.getElementById('workflowPrompt');
+    const complexitySelect = document.getElementById('workflowComplexity');
+    const modelSelect = document.getElementById('model');
+    
+    if (promptInput) promptInput.value = template.workflow.prompt || '';
+    if (complexitySelect) complexitySelect.value = template.workflow.complexity || 'moderate';
+    if (modelSelect) modelSelect.value = template.workflow.model || 'gemini-1.5-flash';
+    
+    // Focus the prompt input
+    if (promptInput) promptInput.focus();
+    
+    this.showNotification(`Template "${template.name}" loaded`, 'success');
+  }
+  
+  // Filter templates by search query
+  filterTemplates(query) {
+    const searchTerm = query.toLowerCase().trim();
+    const templateItems = document.querySelectorAll('.template-item');
+    
+    if (!searchTerm) {
+      templateItems.forEach(item => item.style.display = '');
+      return;
+    }
+    
+    templateItems.forEach(item => {
+      const title = item.querySelector('.template-title')?.textContent?.toLowerCase() || '';
+      const description = item.querySelector('.template-description')?.textContent?.toLowerCase() || '';
+      
+      if (title.includes(searchTerm) || description.includes(searchTerm)) {
+        item.style.display = '';
+      } else {
+        item.style.display = 'none';
+      }
+    });
   }
 
   // Update UI based on current state

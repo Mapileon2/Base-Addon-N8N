@@ -8,14 +8,13 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
 </head>
 <body>
-  <div class="app">
+  <div class="app-container">
     <header class="app-header">
       <h1>Workflow AI</h1>
-      <div class="theme-toggle">
-        <button id="themeToggle">
-          <i class="fas fa-moon"></i>
-        </button>
-      </div>
+      <button id="themeToggle" class="icon-button" title="Toggle theme">
+        <i class="fas fa-moon"></i>
+      </button>
+    </div>
     </header>
 
     <div class="tabs">
@@ -123,6 +122,12 @@
     </div>
   </div>
 
+  <!-- Loading Indicator -->
+  <div id="loadingIndicator" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; justify-content: center; align-items: center;">
+    <div style="background: white; padding: 20px; border-radius: 5px;">Loading...</div>
+  </div>
+  
+  <!-- Scripts -->
   <script src="assets/popup.js"></script>
 </body>
 </html>
