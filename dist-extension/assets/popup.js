@@ -1,923 +1,1000 @@
-document.addEventListener('DOMContentLoaded', () => {
-  class WorkflowAIApp {
-    constructor() {
-      // DOM Elements
-      this.tabButtons = document.querySelectorAll('.tab-button');
-      this.tabPanes = document.querySelectorAll('.tab-pane');
-      this.themeToggle = document.getElementById('themeToggle');
-      this.themeSelect = document.getElementById('themeSelect');
+class WorkflowAIApp {
+  constructor() {
+    this.elements = {};
+    this.settings = {
+      theme: 'light',
+      apiKey: '',
+      n8nUrl: 'http://localhost:5678',
+      n8nApiKey: ''
+    };
+    this.history = [];
+    this.notificationTimeout = null;
+    this.loadingTimeout = null;
+  }
+
+  // Initialize the app
+  async initialize() {
+    try {
+      console.log('Initializing app...');
       
-      // Generate Tab
-      this.workflowPrompt = document.getElementById('workflowPrompt');
-      this.workflowComplexity = document.getElementById('workflowComplexity');
-      this.modelSelect = document.getElementById('model');
-      this.generateBtn = document.getElementById('generateBtn');
-      this.generationStatus = document.getElementById('generationStatus');
+      // Cache DOM elements first
+      this.cacheElements();
       
-      // Templates Tab
-      this.templatesList = document.getElementById('templatesList');
-      this.templateSearch = document.getElementById('templateSearch');
-      this.newTemplateBtn = document.getElementById('newTemplateBtn');
+      // Bind events early to capture all interactions
+      this.bindEvents();
       
-      // History Tab
-      this.historyList = document.getElementById('historyList');
-      this.clearHistoryBtn = document.getElementById('clearHistoryBtn');
+      // Load settings
+      await this.loadSettings();
       
-      // Settings Tab
-      this.apiKeyInput = document.getElementById('apiKey');
-      this.n8nUrlInput = document.getElementById('n8nUrl');
-      this.n8nApiKeyInput = document.getElementById('n8nApiKey');
-      this.testConnectionBtn = document.getElementById('testConnectionBtn');
-      this.testN8nBtn = document.getElementById('testN8nBtn');
-      this.exportDataBtn = document.getElementById('exportDataBtn');
-      this.importDataBtn = document.getElementById('importDataBtn');
-      this.importDataInput = document.getElementById('importDataInput');
-      this.toggleApiKeyBtn = document.getElementById('toggleApiKey');
-      this.toggleN8nApiKeyBtn = document.getElementById('toggleN8nApiKey');
+      // Apply theme
+      this.applyTheme();
       
-      // State
-      this.settings = {
-        apiKey: '',
-        n8nUrl: 'http://localhost:5678',
-        n8nApiKey: '',
-        model: 'gemini-1.5-flash',
-        theme: 'system',
-        templates: [],
-        history: []
+      // Initialize connection status
+      this.initConnectionStatus();
+      
+      // Load history
+      await this.loadHistory();
+      
+      // Update UI
+      this.updateUI();
+      
+      // Show default tab after a small delay to ensure DOM is ready
+      console.log('Switching to default tab...');
+      setTimeout(() => {
+        this.switchTab('generate');
+      }, 50);
+      
+      console.log('App initialization complete');
+      
+    } catch (error) {
+      console.error('Error initializing app:', error);
+      this.showNotification('Failed to initialize app', 'error');
+    }
+  }
+
+  // Cache DOM elements
+  cacheElements() {
+    try {
+      this.elements = {
+        // Tabs
+        tabs: document.querySelectorAll('.tab-button'),
+        tabPanes: document.querySelectorAll('.tab-pane'),
+        
+        // Generate Tab
+        workflowPrompt: document.getElementById('workflowPrompt'),
+        workflowResult: document.getElementById('workflowResult'),
+        generateBtn: document.getElementById('generateBtn'),
+        generationStatus: document.getElementById('generationStatus'),
+        copyWorkflowBtn: document.getElementById('copyWorkflowBtn'),
+        pushToN8nBtn: document.getElementById('pushToN8nBtn'),
+        
+        // Settings Tab
+        apiKeyInput: document.getElementById('apiKey'),
+        n8nUrlInput: document.getElementById('n8nUrl'),
+        n8nApiKeyInput: document.getElementById('n8nApiKey'),
+        testConnectionBtn: document.getElementById('testConnectionBtn'),
+        testN8nBtn: document.getElementById('testN8nBtn'),
+        
+        // Status indicators
+        connectionStatus: document.getElementById('connectionStatus'),
+        n8nStatus: document.getElementById('n8nStatus'),
+        
+        // Theme toggle
+        themeToggle: document.getElementById('themeToggle'),
+        
+        // History
+        historyList: document.getElementById('historyList'),
+        clearHistoryBtn: document.getElementById('clearHistoryBtn'),
+        
+        // Loading overlay
+        loadingOverlay: document.getElementById('loadingOverlay'),
+        loadingMessage: document.getElementById('loadingMessage')
       };
       
-      this.init();
+      // Initialize any missing elements to prevent errors
+      this.elements.workflowResult = this.elements.workflowResult || { style: {}, textContent: '' };
+      this.elements.copyWorkflowBtn = this.elements.copyWorkflowBtn || { style: {} };
+      this.elements.pushToN8nBtn = this.elements.pushToN8nBtn || { style: {} };
+      this.elements.loadingOverlay = this.elements.loadingOverlay || { classList: { add: () => {}, remove: () => {} } };
+      this.elements.loadingMessage = this.elements.loadingMessage || { textContent: '' };
+      
+    } catch (error) {
+      console.error('Error in cacheElements:', error);
+      this.elements = {}; // Ensure elements is always an object
     }
-    
-    async init() {
-      await this.loadSettings();
-      this.setupEventListeners();
-      this.setupTheme();
-      this.renderTemplates();
-      this.renderHistory();
-      this.switchTab('generate');
-    }
-    
-    async loadSettings() {
-      try {
-        const data = await chrome.storage.local.get(Object.keys(this.settings));
-        this.settings = { ...this.settings, ...data };
-        
-        // Update UI with loaded settings
-        if (this.apiKeyInput) this.apiKeyInput.value = this.settings.apiKey || '';
-        if (this.n8nUrlInput) this.n8nUrlInput.value = this.settings.n8nUrl || 'http://localhost:5678';
-        if (this.n8nApiKeyInput) this.n8nApiKeyInput.value = this.settings.n8nApiKey || '';
-        if (this.modelSelect) this.modelSelect.value = this.settings.model || 'gemini-1.5-flash';
-        if (this.themeSelect) this.themeSelect.value = this.settings.theme || 'system';
-        
-        // Apply theme
-        this.setTheme(this.settings.theme);
-      } catch (error) {
-        console.error('Error loading settings:', error);
-      }
-    }
-    
-    async saveSettings() {
-      try {
-        // Update settings from UI
-        if (this.apiKeyInput) this.settings.apiKey = this.apiKeyInput.value.trim();
-        if (this.n8nUrlInput) this.settings.n8nUrl = this.n8nUrlInput.value.trim();
-        if (this.n8nApiKeyInput) this.settings.n8nApiKey = this.n8nApiKeyInput.value.trim();
-        if (this.modelSelect) this.settings.model = this.modelSelect.value;
-        if (this.themeSelect) this.settings.theme = this.themeSelect.value;
-        
-        await chrome.storage.local.set(this.settings);
-      } catch (error) {
-        console.error('Error saving settings:', error);
-      }
-    }
-    
-    setupEventListeners() {
-      // Tab switching
-      this.tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-          const tabId = button.dataset.tab;
-          if (tabId) this.switchTab(tabId);
-        });
+  }
+
+  // Bind event listeners
+  bindEvents() {
+    try {
+      // Tab switching - use event delegation for better reliability
+      document.addEventListener('click', (e) => {
+        const tab = e.target.closest('.tab-button');
+        if (tab && tab.dataset.tab) {
+          e.preventDefault();
+          this.switchTab(tab.dataset.tab);
+        }
       });
       
-      // Theme toggle
-      if (this.themeToggle) {
-        this.themeToggle.addEventListener('click', () => this.toggleTheme());
+      // Bind buttons
+      this.bindButtons();
+      
+    } catch (error) {
+      console.error('Error in bindEvents:', error);
+    }
+  }
+  
+  // Toggle password visibility
+  togglePasswordVisibility(inputId, toggleBtnId) {
+    const input = document.getElementById(inputId);
+    const toggleBtn = document.getElementById(toggleBtnId);
+    if (!input || !toggleBtn) return;
+
+    toggleBtn.addEventListener('click', () => {
+      const type = input.type === 'password' ? 'text' : 'password';
+      input.type = type;
+      const icon = toggleBtn.querySelector('i');
+      if (icon) {
+        icon.className = type === 'password' ? 'fas fa-eye' : 'fas fa-eye-slash';
+      }
+    });
+  }
+
+  // Handle file import
+  setupFileImport() {
+    const importInput = document.getElementById('importDataInput');
+    if (!importInput) return;
+
+    importInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        const content = await file.text();
+        const data = JSON.parse(content);
+        // Handle imported data here
+        console.log('Imported data:', data);
+        this.showNotification('Data imported successfully', 'success');
+      } catch (error) {
+        console.error('Error importing data:', error);
+        this.showNotification('Failed to import data', 'error');
+      }
+    });
+  }
+
+  // Export data
+  async exportData() {
+    try {
+      const data = {
+        settings: this.settings,
+        history: this.history
+      };
+      
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `workflow-ai-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      this.showNotification('Data exported successfully', 'success');
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      this.showNotification('Failed to export data', 'error');
+    }
+  }
+
+  // Bind button events
+  bindButtons() {
+    try {
+      console.log('Binding buttons...');
+      
+      // Generate workflow button
+      const generateBtn = document.getElementById('generateBtn');
+      if (generateBtn) {
+        console.log('Found generate button');
+        generateBtn.addEventListener('click', (e) => {
+          console.log('Generate button clicked');
+          e.preventDefault();
+          this.generateWorkflow();
+        });
+      } else {
+        console.warn('Generate button not found');
       }
       
-      // Theme select
-      if (this.themeSelect) {
-        this.themeSelect.addEventListener('change', (e) => {
-          this.setTheme(e.target.value);
+      // Test connection buttons
+      const testConnectionBtn = document.getElementById('testConnectionBtn');
+      if (testConnectionBtn) {
+        console.log('Found test connection button');
+        testConnectionBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Test connection button clicked');
+          this.testConnection();
+        });
+      } else {
+        console.warn('Test connection button not found');
+      }
+      
+      const testN8nBtn = document.getElementById('testN8nBtn');
+      if (testN8nBtn) {
+        console.log('Found test n8n button');
+        testN8nBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Test n8n button clicked');
+          this.testN8nConnection();
+        });
+      } else {
+        console.warn('Test n8n button not found');
+      }
+      
+      // Clear history button
+      const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+      if (clearHistoryBtn) {
+        console.log('Found clear history button');
+        clearHistoryBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Clear history button clicked');
+          this.clearHistory();
+        });
+      } else {
+        console.warn('Clear history button not found');
+      }
+      
+      // New template button
+      const newTemplateBtn = document.getElementById('newTemplateBtn');
+      if (newTemplateBtn) {
+        console.log('Found new template button');
+        newTemplateBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('New template button clicked');
+          // Implement template creation
+          this.showNotification('Template creation not implemented yet', 'info');
+        });
+      } else {
+        console.warn('New template button not found');
+      }
+      
+      // Export/Import buttons
+      const exportDataBtn = document.getElementById('exportDataBtn');
+      if (exportDataBtn) {
+        console.log('Found export data button');
+        exportDataBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          console.log('Export data button clicked');
+          this.exportData();
+        });
+      } else {
+        console.warn('Export data button not found');
+      }
+      
+      // Setup file import
+      this.setupFileImport();
+      
+      // Setup password visibility toggles
+      this.togglePasswordVisibility('apiKey', 'toggleApiKey');
+      this.togglePasswordVisibility('n8nApiKey', 'toggleN8nApiKey');
+      
+      // Theme toggle and selector
+      const themeToggle = document.getElementById('themeToggle');
+      if (themeToggle) {
+        console.log('Found theme toggle');
+        themeToggle.addEventListener('click', (e) => {
+          this.settings.theme = e.target.checked ? 'dark' : 'light';
+          this.applyTheme();
           this.saveSettings();
         });
       }
       
-      // API Key visibility toggle
-      if (this.toggleApiKeyBtn && this.apiKeyInput) {
-        this.toggleApiKeyBtn.addEventListener('click', () => this.toggleApiKeyVisibility(this.apiKeyInput, this.toggleApiKeyBtn));
-      }
-      
-      // n8n API Key visibility toggle
-      if (this.toggleN8nApiKeyBtn && this.n8nApiKeyInput) {
-        this.toggleN8nApiKeyBtn.addEventListener('click', () => 
-          this.toggleApiKeyVisibility(this.n8nApiKeyInput, this.toggleN8nApiKeyBtn)
-        );
-      }
-      
-      // Test API connection
-      if (this.testConnectionBtn) {
-        this.testConnectionBtn.addEventListener('click', () => this.testApiKey());
-      }
-      
-      // Test n8n connection
-      if (this.testN8nBtn) {
-        this.testN8nBtn.addEventListener('click', () => this.testN8nConnection());
-      }
-      
-      // Generate workflow
-      if (this.generateBtn && this.workflowPrompt) {
-        this.generateBtn.addEventListener('click', () => this.generateWorkflow());
-      }
-      
-      // New template
-      if (this.newTemplateBtn) {
-        this.newTemplateBtn.addEventListener('click', () => this.showNewTemplateModal());
-      }
-      
-      // Template search
-      if (this.templateSearch) {
-        this.templateSearch.addEventListener('input', (e) => this.filterTemplates(e.target.value));
-      }
-      
-      // Clear history
-      if (this.clearHistoryBtn) {
-        this.clearHistoryBtn.addEventListener('click', () => this.clearHistory());
-      }
-      
-      // Export data
-      if (this.exportDataBtn) {
-        this.exportDataBtn.addEventListener('click', () => this.exportData());
-      }
-      
-      // Import data
-      if (this.importDataInput) {
-        this.importDataInput.addEventListener('change', (e) => this.handleImportData(e));
-      }
-      
-      // Save settings on input changes
-      const saveSettingsInputs = [
-        this.apiKeyInput,
-        this.n8nUrlInput,
-        this.n8nApiKeyInput,
-        this.modelSelect
-      ];
-      
-      saveSettingsInputs.forEach(input => {
-        if (input) {
-          input.addEventListener('change', () => this.saveSettings());
-        }
-      });
+    } catch (error) {
+      console.error('Error binding buttons:', error);
     }
-    
-    // Tab management
-    switchTab(tabId) {
-      // Update active tab button
-      this.tabButtons.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tabId);
-      });
+  }
+
+  // Switch between tabs
+  switchTab(tabName) {
+    try {
+      console.log('Switching to tab:', tabName);
       
-      // Show active tab content
-      this.tabPanes.forEach(pane => {
-        pane.classList.toggle('active', pane.id === tabId);
-      });
+      // Ensure elements are cached
+      if (!this.elements.tabPanes || !this.elements.tabs) {
+        this.cacheElements();
+      }
       
-      // Save active tab
-      chrome.storage.local.set({ activeTab: tabId });
-    }
-    
-    // Theme management
-    setupTheme() {
-      // Set initial theme
-      this.setTheme(this.settings.theme);
+      // Hide all tab panes
+      if (this.elements.tabPanes) {
+        this.elements.tabPanes.forEach(pane => {
+          if (pane) pane.classList.remove('active');
+        });
+      }
       
-      // Listen for system theme changes
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
-      prefersDark.addEventListener('change', (e) => {
-        if (this.settings.theme === 'system') {
-          document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-        }
-      });
-    }
-    
-    setTheme(theme) {
-      this.settings.theme = theme;
+      // Deactivate all tab buttons
+      if (this.elements.tabs) {
+        this.elements.tabs.forEach(tab => {
+          if (tab) tab.classList.remove('active');
+        });
+      }
       
-      if (theme === 'system') {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
+      // Show selected tab
+      const tabPane = document.getElementById(tabName);
+      if (tabPane) {
+        tabPane.classList.add('active');
       } else {
-        document.documentElement.setAttribute('data-theme', theme);
+        console.error('Tab pane not found:', tabName);
       }
       
-      if (this.themeSelect) {
-        this.themeSelect.value = theme;
+      // Activate clicked tab button
+      const tabButton = document.querySelector(`[data-tab="${tabName}"]`);
+      if (tabButton) {
+        tabButton.classList.add('active');
+      } else {
+        console.error('Tab button not found for:', tabName);
       }
       
-      // Update theme toggle icon
-      if (this.themeToggle) {
-        const icon = this.themeToggle.querySelector('i');
-        if (icon) {
-          const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-          icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
-        }
-      }
+      // Update UI for the active tab
+      this.updateUI();
       
-      // Save theme preference
-      this.saveSettings();
+    } catch (error) {
+      console.error('Error in switchTab:', error);
     }
-    
-    toggleTheme() {
-      const currentTheme = document.documentElement.getAttribute('data-theme');
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      this.setTheme(newTheme);
-    }
-    
-    // API Key visibility toggle
-    toggleApiKeyVisibility(inputElement, toggleButton) {
-      const isPassword = inputElement.type === 'password';
-      inputElement.type = isPassword ? 'text' : 'password';
-      
-      const icon = toggleButton.querySelector('i');
-      if (icon) {
-        icon.className = isPassword ? 'fas fa-eye-slash' : 'fas fa-eye';
-      }
-    }
-    
-    // Test API connection with timeout
-    async testApiKey() {
-      const API_TIMEOUT = 10000; // 10 seconds
-      const testButton = this.testConnectionBtn;
-      let timeoutId;
-      
-      try {
-        const apiKey = this.settings.apiKey?.trim();
-        
-        if (!apiKey) {
-          this.showStatus('Please enter your Gemini API key', 'error', true);
-          return false;
-        }
+  }
 
-        // Update UI
-        this.showStatus('Testing API key...', 'info', true);
-        if (testButton) {
-          testButton.disabled = true;
-          testButton.textContent = 'Testing...';
-        }
-        
-        // Create a promise that rejects after timeout
-        const timeoutPromise = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new Error('Connection timed out. The server is taking too long to respond.'));
-          }, API_TIMEOUT);
-        });
-        
-        // Create the API request promise
-        const apiPromise = fetch('https://generativelanguage.googleapis.com/v1beta/models', {
-          method: 'GET',
-          headers: {
-            'x-goog-api-key': apiKey,
-            'Content-Type': 'application/json'
-          }
-        });
-        
-        // Race between the API call and the timeout
-        const response = await Promise.race([apiPromise, timeoutPromise]);
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error?.message || `HTTP ${response.status}`);
-        }
-        
-        this.showStatus('✅ API key is valid!', 'success', true);
-        return true;
-        
-      } catch (error) {
-        console.error('API test failed:', error);
-        const errorMessage = error.message.includes('Failed to fetch') 
-          ? 'Network error. Please check your internet connection.' 
-          : error.message;
-        this.showStatus(`❌ ${errorMessage}`, 'error', true);
-        return false;
-        
-      } finally {
-        // Cleanup
-        if (timeoutId) clearTimeout(timeoutId);
-        if (testButton) {
-          testButton.disabled = false;
-          testButton.textContent = 'Test Connection';
-        }
-      }
-    }
+  // Set loading state with better visual feedback
+  setLoading(isLoading, message = '') {
+    if (!this.elements.loadingOverlay) return;
     
-    // Test n8n connection with timeout
-    async testN8nConnection() {
-      const API_TIMEOUT = 10000; // 10 seconds
-      const testButton = this.testN8nBtn;
-      const originalButtonText = testButton?.textContent;
-      let timeoutId;
+    const { loadingOverlay, loadingMessage } = this.elements;
+    
+    if (isLoading) {
+      // Prevent multiple loading indicators
+      if (this.loadingTimeout) clearTimeout(this.loadingTimeout);
       
-      try {
-        // Get current input values
-        let n8nUrl = (this.n8nUrlInput?.value || '').trim();
-        const n8nApiKey = (this.n8nApiKeyInput?.value || '').trim();
-        
-        // Validate inputs
-        if (!n8nUrl) {
-          this.showStatus('Please enter n8n URL', 'error');
-          return false;
+      // Show loading indicator after a small delay to prevent flickering
+      this.loadingTimeout = setTimeout(() => {
+        loadingOverlay.classList.add('visible');
+        if (loadingMessage && message) {
+          loadingMessage.textContent = message;
         }
-        
-        if (!n8nApiKey) {
-          this.showStatus('Please enter n8n API key', 'error');
-          return false;
+      }, 200);
+    } else {
+      if (this.loadingTimeout) clearTimeout(this.loadingTimeout);
+      
+      // Hide loading overlay with fade out effect
+      loadingOverlay.classList.remove('visible');
+      
+      // Reset loading message after animation completes
+      setTimeout(() => {
+        if (loadingMessage) {
+          loadingMessage.textContent = '';
         }
+      }, 300);
+    }
+  }
 
-        // Ensure URL has protocol and correct format
-        if (!n8nUrl.startsWith('http://') && !n8nUrl.startsWith('https://')) {
-          n8nUrl = 'http://' + n8nUrl;
-        }
-        
-        // Normalize URL (remove trailing slashes)
-        n8nUrl = n8nUrl.replace(/\/+$/, '');
-        
-        // Update UI
-        this.showStatus('Testing n8n connection...', 'info', true);
-        if (testButton) {
-          testButton.disabled = true;
-          testButton.textContent = 'Testing...';
-        }
-        
-        // Create a promise that rejects after timeout
-        const timeoutPromise = new Promise((_, reject) => {
-          timeoutId = setTimeout(() => {
-            reject(new Error('Connection timed out. n8n server is not responding.'));
-          }, API_TIMEOUT);
+  // Show notification to user
+  showNotification(message, type = 'info') {
+    // Implementation for showing notifications
+    console.log(`[${type}] ${message}`);
+  }
+
+  // Load settings from storage
+  async loadSettings() {
+    try {
+      const data = await new Promise((resolve) => {
+        chrome.storage.local.get(['settings'], (result) => {
+          resolve(result.settings || {});
         });
-        
-        // Create the API request promise
-        const healthCheckUrl = `${n8nUrl}/rest/healthz`;
-        const apiPromise = fetch(healthCheckUrl, {
-          method: 'GET',
-          headers: {
-            'X-N8N-API-KEY': n8nApiKey,
-            'Accept': 'application/json'
-          }
-        });
-        
-        // Race between the API call and the timeout
-        const response = await Promise.race([apiPromise, timeoutPromise]);
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.message || `HTTP ${response.status} - ${response.statusText}`);
-        }
-        
-        const data = await response.json().catch(() => ({}));
-        
-        if (data.status === 'ok') {
-          this.showStatus('✅ Successfully connected to n8n!', 'success', true);
-          
-          // Save the valid URL and API key
-          this.settings.n8nUrl = n8nUrl;
-          this.settings.n8nApiKey = n8nApiKey;
-          await this.saveSettings();
-          
-          return true;
-        } else {
-          throw new Error(data.message || 'Failed to connect to n8n');
-        }
-        
-      } catch (error) {
-        console.error('n8n connection test failed:', error);
-        const errorMessage = error.message.includes('Failed to fetch')
-          ? 'Failed to connect to n8n. Make sure the URL is correct and n8n is running.'
-          : error.message;
-        this.showStatus(`❌ ${errorMessage}`, 'error', true);
-        return false;
-        
-      } finally {
-        // Cleanup
-        if (timeoutId) clearTimeout(timeoutId);
-        if (testButton) {
-          testButton.disabled = false;
-          testButton.textContent = originalButtonText || 'Test n8n Connection';
-        }
-      }
+      });
+      
+      this.settings = { ...this.settings, ...data };
+      
+      // Update UI with loaded settings
+      if (this.elements.apiKeyInput) this.elements.apiKeyInput.value = this.settings.apiKey || '';
+      if (this.elements.n8nUrlInput) this.elements.n8nUrlInput.value = this.settings.n8nUrl || '';
+      if (this.elements.n8nApiKeyInput) this.elements.n8nApiKeyInput.value = this.settings.n8nApiKey || '';
+      if (this.elements.themeToggle) this.elements.themeToggle.checked = this.settings.theme === 'dark';
+      
+    } catch (error) {
+      console.error('Error loading settings:', error);
+    }
+  }
+
+  // Save settings to storage
+  async saveSettings() {
+    try {
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ settings: this.settings }, resolve);
+      });
+    } catch (error) {
+      console.error('Error saving settings:', error);
+    }
+  }
+
+  // Apply theme to the UI
+  applyTheme() {
+    document.documentElement.setAttribute('data-theme', this.settings.theme || 'light');
+  }
+
+  // Lazy load non-critical components
+  async lazyLoadComponents() {
+    try {
+      // These will load in the background without blocking the UI
+      const promises = [];
+      
+      // Add any lazy loading tasks here
+      // Example: promises.push(this.loadSomeData());
+      
+      await Promise.allSettled(promises);
+    } catch (error) {
+      console.error('Error in lazyLoadComponents:', error);
+    }
+  }
+
+  // Initialize connection status
+  initConnectionStatus() {
+    if (this.elements.connectionStatus) {
+      this.elements.connectionStatus.textContent = 'Disconnected';
+      this.elements.connectionStatus.className = 'status status-error';
     }
     
-    // Workflow generation
-    async generateWorkflow() {
-      try {
-        if (!this.workflowPrompt) {
-          console.error('Workflow prompt element not found');
-          return;
-        }
-        
-        const prompt = this.workflowPrompt.value.trim();
-        if (!prompt) {
-          this.showStatus('Please enter a workflow description', 'error');
-          return;
-        }
-        
-        if (!this.settings.apiKey) {
-          this.showStatus('Please set your API key in Settings', 'error');
-          this.switchTab('settings');
-          return;
-        }
-        
-        const complexity = this.workflowComplexity ? this.workflowComplexity.value : 'moderate';
-        const model = this.modelSelect ? this.modelSelect.value : 'gemini-1.5-flash';
-        
-        this.showStatus('Generating workflow...', 'info');
-        
-        // Generate the workflow using the selected model
-        const result = await this.generateWithGemini(prompt, complexity, model);
-        
-        if (result) {
-          this.showStatus('Workflow generated successfully!', 'success');
-          
-          // Add to history
-          this.addToHistory({
-            id: Date.now().toString(),
-            prompt,
-            result,
-            complexity,
-            model,
-            timestamp: new Date().toISOString(),
-            isFavorite: false
-          });
-          
-          // Switch to history tab
-          this.switchTab('history');
-        }
-      } catch (error) {
-        console.error('Error generating workflow:', error);
-        this.showStatus(`Error: ${error.message}`, 'error');
-      }
+    if (this.elements.n8nStatus) {
+      this.elements.n8nStatus.textContent = 'Disconnected';
+      this.elements.n8nStatus.className = 'status status-error';
+    }
+  }
+
+  // Test connections if we have the required info
+  async testConnectionsIfPossible() {
+    if (this.settings.apiKey) {
+      await this.testConnection();
     }
     
-    async generateWithGemini(prompt, complexity, model) {
-      try {
-        // This is a placeholder for the actual API call to Gemini
-        // You'll need to implement this based on the Gemini API documentation
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.settings.apiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+    if (this.settings.n8nUrl && this.settings.n8nApiKey) {
+      await this.testN8nConnection();
+    }
+  }
+
+  // Test Gemini API connection
+  async testConnection() {
+    if (!this.settings.apiKey) {
+      this.showNotification('Please enter your Gemini API key first', 'error');
+      return false;
+    }
+
+    this.setLoading(true, 'Testing Gemini API connection...');
+    
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            action: 'testConnection',
+            apiKey: this.settings.apiKey
           },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{
-                text: `Generate a workflow for: ${prompt}\n\nComplexity: ${complexity}`
-              }]
-            }]
-          })
-        });
-        
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error?.message || 'Failed to generate workflow');
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve({ success: false, error: chrome.runtime.lastError.message });
+            } else {
+              resolve(response);
+            }
+          }
+        );
+      });
+
+      if (response && response.success) {
+        this.showNotification('Successfully connected to Gemini API', 'success');
+        // Update connection status in UI
+        const statusEl = document.getElementById('connectionStatus');
+        if (statusEl) {
+          statusEl.textContent = 'Connected to Gemini API';
+          statusEl.className = 'status-message success';
         }
+        return true;
+      } else {
+        const errorMsg = response?.error || 'Failed to connect to Gemini API';
+        this.showNotification(errorMsg, 'error');
+        return false;
+      }
+    } catch (error) {
+      console.error('Connection test failed:', error);
+      this.showNotification(`Connection test failed: ${error.message}`, 'error');
+      return false;
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  // Test n8n connection
+  async testN8nConnection() {
+    if (!this.settings.n8nUrl || !this.settings.n8nApiKey) {
+      this.showNotification('Please enter n8n URL and API key first', 'error');
+      return false;
+    }
+
+    this.setLoading(true, 'Testing n8n connection...');
+    
+    try {
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            action: 'testN8nConnection',
+            url: this.settings.n8nUrl,
+            apiKey: this.settings.n8nApiKey
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve({ success: false, error: chrome.runtime.lastError.message });
+            } else {
+              resolve(response);
+            }
+          }
+        );
+      });
+
+      if (response && response.success) {
+        this.showNotification('Successfully connected to n8n', 'success');
+        // Update connection status in UI
+        const statusEl = document.getElementById('connectionStatus');
+        if (statusEl) {
+          statusEl.textContent = 'Connected to n8n';
+          statusEl.className = 'status-message success';
+        }
+        return true;
+      } else {
+        const errorMsg = response?.error || 'Failed to connect to n8n';
+        this.showNotification(errorMsg, 'error');
+        return false;
+      }
+    } catch (error) {
+      console.error('n8n connection test failed:', error);
+      this.showNotification(`n8n connection test failed: ${error.message}`, 'error');
+      return false;
+    } finally {
+      this.setLoading(false);
+    }
+  }
+
+  // Generate workflow based on user input
+  async generateWorkflow() {
+    try {
+      // Get user input
+      const prompt = document.getElementById('workflowPrompt')?.value.trim();
+      const complexity = document.getElementById('workflowComplexity')?.value || 'moderate';
+      const model = document.getElementById('model')?.value || 'gemini-1.5-flash';
+
+      // Validate input
+      if (!prompt) {
+        this.showNotification('Please enter a workflow description', 'error');
+        return;
+      }
+
+      if (!this.settings.apiKey) {
+        this.showNotification('Please set your Gemini API key in Settings', 'error');
+        this.switchTab('settings');
+        return;
+      }
+
+      // Set loading state
+      this.setLoading(true, 'Generating workflow...');
+      
+      // Generate a timestamp for this generation
+      const timestamp = new Date().toISOString();
+      
+      // Send message to background script to generate workflow
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            action: 'generateWorkflow',
+            prompt: prompt,
+            complexity: complexity,
+            model: model,
+            apiKey: this.settings.apiKey,
+            timestamp: timestamp
+          },
+          (response) => {
+            if (chrome.runtime.lastError) {
+              resolve({ success: false, error: chrome.runtime.lastError.message });
+            } else {
+              resolve(response);
+            }
+          }
+        );
+      });
+
+      if (response && response.success) {
+        // Show success message
+        this.showNotification('Workflow generated successfully!', 'success');
         
-        const data = await response.json();
-        return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No content generated';
-      } catch (error) {
-        console.error('Error calling Gemini API:', error);
-        throw new Error(`Failed to generate workflow: ${error.message}`);
-      }
-    }
-    
-    // Templates management
-    renderTemplates() {
-      if (!this.templatesList) return;
-      
-      if (this.settings.templates?.length === 0) {
-        this.templatesList.innerHTML = `
-          <div class="empty-state">
-            <i class="fas fa-inbox"></i>
-            <p>No templates saved yet</p>
-          </div>
-        `;
-        return;
-      }
-      
-      this.templatesList.innerHTML = this.settings.templates
-        .map(template => `
-          <div class="template-item" data-id="${template.id}">
-            <div class="template-header">
-              <div class="template-title">${template.name || 'Untitled Template'}</div>
-              <div class="template-actions">
-                <button class="icon-button use-template" title="Use Template">
-                  <i class="fas fa-play"></i>
-                </button>
-                <button class="icon-button edit-template" title="Edit Template">
-                  <i class="fas fa-edit"></i>
-                </button>
-                <button class="icon-button delete-template" title="Delete Template">
-                  <i class="fas fa-trash"></i>
-                </button>
-              </div>
-            </div>
-            <div class="template-description">
-              ${template.description || 'No description'}
-            </div>
-            <div class="template-footer">
-              <span>${template.model || 'N/A'}</span>
-              <span>${new Date(template.timestamp).toLocaleDateString()}</span>
-            </div>
-          </div>
-        `).join('');
-      
-      // Add event listeners to template actions
-      this.templatesList.querySelectorAll('.use-template').forEach(button => {
-        button.addEventListener('click', (e) => {
-          const templateId = e.target.closest('.template-item')?.dataset.id;
-          if (templateId) this.useTemplate(templateId);
-        });
-      });
-      
-      this.templatesList.querySelectorAll('.edit-template').forEach(button => {
-        button.addEventListener('click', (e) => {
-          const templateId = e.target.closest('.template-item')?.dataset.id;
-          if (templateId) this.editTemplate(templateId);
-        });
-      });
-      
-      this.templatesList.querySelectorAll('.delete-template').forEach(button => {
-        button.addEventListener('click', (e) => {
-          const templateId = e.target.closest('.template-item')?.dataset.id;
-          if (templateId) this.deleteTemplate(templateId);
-        });
-      });
-    }
-    
-    filterTemplates(query) {
-      if (!this.templatesList) return;
-      
-      const searchTerm = query.toLowerCase().trim();
-      const items = this.templatesList.querySelectorAll('.template-item');
-      
-      items.forEach(item => {
-        const title = item.querySelector('.template-title')?.textContent?.toLowerCase() || '';
-        const description = item.querySelector('.template-description')?.textContent?.toLowerCase() || '';
-        const isVisible = title.includes(searchTerm) || description.includes(searchTerm);
-        item.style.display = isVisible ? 'block' : 'none';
-      });
-    }
-    
-    showNewTemplateModal() {
-      // This would show a modal to create a new template
-      // For now, we'll just show a message
-      this.showStatus('New template functionality coming soon!', 'info');
-    }
-    
-    useTemplate(templateId) {
-      const template = this.settings.templates.find(t => t.id === templateId);
-      if (!template) return;
-      
-      if (this.workflowPrompt) {
-        this.workflowPrompt.value = template.prompt || '';
-      }
-      
-      if (this.workflowComplexity) {
-        this.workflowComplexity.value = template.complexity || 'moderate';
-      }
-      
-      if (this.modelSelect) {
-        this.modelSelect.value = template.model || 'gemini-1.5-flash';
-      }
-      
-      this.switchTab('generate');
-      this.showStatus(`Loaded template: ${template.name || 'Untitled'}`, 'success');
-    }
-    
-    editTemplate(templateId) {
-      // This would show a modal to edit the template
-      // For now, we'll just show a message
-      this.showStatus('Edit template functionality coming soon!', 'info');
-    }
-    
-    deleteTemplate(templateId) {
-      if (confirm('Are you sure you want to delete this template?')) {
-        this.settings.templates = this.settings.templates.filter(t => t.id !== templateId);
-        this.saveSettings();
-        this.renderTemplates();
-        this.showStatus('Template deleted', 'success');
-      }
-    }
-    
-    // History management
-    renderHistory() {
-      if (!this.historyList) return;
-      
-      if (this.settings.history?.length === 0) {
-        this.historyList.innerHTML = `
-          <div class="empty-state">
-            <i class="fas fa-history"></i>
-            <p>No history yet</p>
-          </div>
-        `;
-        return;
-      }
-      
-      // Sort history by timestamp (newest first)
-      const sortedHistory = [...this.settings.history].sort((a, b) => 
-        new Date(b.timestamp) - new Date(a.timestamp)
-      );
-      
-      this.historyList.innerHTML = sortedHistory
-        .map(item => {
-          const previewText = item.result 
-            ? item.result.split('\n').slice(0, 3).join('\n')
-            : 'No workflow generated';
-            
-          return `
-            <div class="history-item" data-id="${item.id}">
-              <div class="history-header">
-                <div class="history-title">
-                  <i class="fas fa-chevron-${item.expanded ? 'down' : 'right'} toggle-expand"></i>
-                  ${item.prompt.substring(0, 50)}${item.prompt.length > 50 ? '...' : ''}
-                </div>
-                <div class="history-actions">
-                  <button class="btn btn-sm btn-view">
-                    <i class="fas fa-eye"></i> View
-                  </button>
-                  <button class="icon-button favorite" title="${item.isFavorite ? 'Remove from favorites' : 'Add to favorites'}">
-                    <i class="fas${item.isFavorite ? ' fa-star' : ' fa-star-o'}"></i>
-                  </button>
-                  <button class="icon-button copy" title="Copy to clipboard">
-                    <i class="fas fa-copy"></i>
-                  </button>
-                  <button class="icon-button delete" title="Delete">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </div>
-              </div>
-              <div class="history-preview" title="${item.prompt}">
-                <div class="preview-header">
-                  <strong>Prompt:</strong> ${item.prompt.substring(0, 100)}${item.prompt.length > 100 ? '...' : ''}
-                </div>
-                <div class="preview-content">
-                  <strong>Preview:</strong>
-                  <pre>${previewText}</pre>
-                </div>
-              </div>
-              <div class="history-details" style="display: ${item.expanded ? 'block' : 'none'};">
-                <div class="workflow-full">
-                  <h4>Generated Workflow:</h4>
-                  <pre>${item.result || 'No workflow generated'}</pre>
-                </div>
-              </div>
-              <div class="history-footer">
-                <div class="workflow-meta">
-                  <span class="badge">${item.model || 'N/A'}</span>
-                  <span class="badge">${item.complexity || 'N/A'}</span>
-                  <span class="timestamp">${new Date(item.timestamp).toLocaleString()}</span>
-                </div>
-                <button class="btn btn-link btn-sm toggle-details">
-                  ${item.expanded ? 'Hide Details' : 'Show Details'}
-                </button>
-              </div>
-            </div>
-          `;
-        }).join('');
-      
-      // Add event listeners to history actions
-      this.historyList.querySelectorAll('.favorite').forEach(button => {
-        button.addEventListener('click', (e) => {
-          const historyId = e.target.closest('.history-item')?.dataset.id;
-          if (historyId) this.toggleFavorite(historyId);
-        });
-      });
-      
-      this.historyList.querySelectorAll('.copy').forEach(button => {
-        button.addEventListener('click', (e) => {
-          const historyId = e.target.closest('.history-item')?.dataset.id;
-          if (historyId) this.copyToClipboard(historyId);
-        });
-      });
-      
-      this.historyList.querySelectorAll('.delete').forEach(button => {
-        button.addEventListener('click', (e) => {
-          const historyId = e.target.closest('.history-item')?.dataset.id;
-          if (historyId) this.deleteHistoryItem(historyId);
-        });
-      });
-      
-      // Add click handlers for view buttons
-      this.historyList.querySelectorAll('.btn-view').forEach(button => {
-        button.addEventListener('click', (e) => {
-          const historyItem = e.target.closest('.history-item');
-          const historyId = historyItem?.dataset.id;
-          if (historyId) {
-            // Toggle the expanded state
-            const item = this.settings.history.find(h => h.id === historyId);
-            if (item) {
-              item.expanded = !item.expanded;
-              this.saveSettings();
-              this.renderHistory();
-            }
-          }
-        });
-      });
-      
-      // Add click handlers for expand/collapse toggles
-      this.historyList.querySelectorAll('.toggle-expand, .toggle-details').forEach(element => {
-        element.addEventListener('click', (e) => {
-          const historyItem = e.target.closest('.history-item');
-          const historyId = historyItem?.dataset.id;
-          if (historyId) {
-            const item = this.settings.history.find(h => h.id === historyId);
-            if (item) {
-              item.expanded = !item.expanded;
-              this.saveSettings();
-              
-              // Toggle the details section
-              const details = historyItem.querySelector('.history-details');
-              const toggleIcon = historyItem.querySelector('.toggle-expand');
-              const toggleButton = historyItem.querySelector('.toggle-details');
-              
-              if (details) {
-                details.style.display = item.expanded ? 'block' : 'none';
-              }
-              if (toggleIcon) {
-                toggleIcon.className = `fas fa-chevron-${item.expanded ? 'down' : 'right'} toggle-expand`;
-              }
-              if (toggleButton) {
-                toggleButton.textContent = item.expanded ? 'Hide Details' : 'Show Details';
-              }
-            }
-          }
-        });
-      });
-    }
-    
-    addToHistory(item) {
-      if (!this.settings.history) {
-        this.settings.history = [];
-      }
-      
-      // Add new item to the beginning of the array
-      this.settings.history.unshift(item);
-      
-      // Keep only the most recent 100 items
-      if (this.settings.history.length > 100) {
-        this.settings.history = this.settings.history.slice(0, 100);
-      }
-      
-      this.saveSettings();
-      this.renderHistory();
-    }
-    
-    toggleFavorite(itemId) {
-      const item = this.settings.history.find(item => item.id === itemId);
-      if (item) {
-        item.isFavorite = !item.isFavorite;
-        this.saveSettings();
-        this.renderHistory();
-      }
-    }
-    
-    async copyToClipboard(itemId) {
-      const item = this.settings.history.find(item => item.id === itemId);
-      if (!item) return;
-      
-      try {
-        await navigator.clipboard.writeText(item.result);
-        this.showStatus('Copied to clipboard!', 'success');
-      } catch (error) {
-        console.error('Failed to copy:', error);
-        this.showStatus('Failed to copy to clipboard', 'error');
-      }
-    }
-    
-    deleteHistoryItem(itemId) {
-      if (confirm('Are you sure you want to delete this item?')) {
-        this.settings.history = this.settings.history.filter(item => item.id !== itemId);
-        this.saveSettings();
-        this.renderHistory();
-        this.showStatus('Item deleted', 'success');
-      }
-    }
-    
-    clearHistory() {
-      if (confirm('Are you sure you want to clear all history? This cannot be undone.')) {
-        this.settings.history = [];
-        this.saveSettings();
-        this.renderHistory();
-        this.showStatus('History cleared', 'success');
-      }
-    }
-    
-    // Data import/export
-    exportData() {
-      try {
-        const data = {
-          version: '1.0',
-          exportedAt: new Date().toISOString(),
-          settings: this.settings
+        // Switch to the history tab to show the result
+        this.switchTab('history');
+        
+        // Add to history
+        const workflow = {
+          id: timestamp,
+          prompt: prompt,
+          complexity: complexity,
+          model: model,
+          timestamp: timestamp,
+          workflow: response.workflow,
+          nodes: response.workflow?.nodes || [],
+          connections: response.workflow?.connections || []
         };
         
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
+        // Add to beginning of history and keep only last 50 items
+        this.history.unshift(workflow);
+        this.history = this.history.slice(0, 50);
         
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `workflow-ai-backup-${new Date().toISOString().split('T')[0]}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        // Save updated history
+        await new Promise((resolve) => {
+          chrome.storage.local.set({ workflowHistory: this.history }, resolve);
+        });
         
-        this.showStatus('Data exported successfully', 'success');
-      } catch (error) {
-        console.error('Error exporting data:', error);
-        this.showStatus('Failed to export data', 'error');
+        // Update UI
+        this.renderHistory();
+        
+      } else {
+        const errorMsg = response?.error || 'Failed to generate workflow';
+        this.showNotification(errorMsg, 'error');
       }
-    }
-    
-    async handleImportData(event) {
-      const file = event.target.files[0];
-      if (!file) return;
       
-      try {
-        const content = await file.text();
-        const data = JSON.parse(content);
-        
-        if (!data.version || !data.settings) {
-          throw new Error('Invalid backup file format');
-        }
-        
-        if (confirm('This will overwrite your current settings. Continue?')) {
-          this.settings = { ...this.settings, ...data.settings };
-          await this.saveSettings();
-          await this.loadSettings();
-          this.renderTemplates();
-          this.renderHistory();
-          this.showStatus('Data imported successfully', 'success');
-        }
-      } catch (error) {
-        console.error('Error importing data:', error);
-        this.showStatus('Failed to import data: ' + error.message, 'error');
-      } finally {
-        // Reset the file input
-        if (this.importDataInput) {
-          this.importDataInput.value = '';
-        }
-      }
+    } catch (error) {
+      console.error('Workflow generation failed:', error);
+      this.showNotification(`Workflow generation failed: ${error.message}`, 'error');
+    } finally {
+      this.setLoading(false);
     }
-    
-    // Utility methods
-    showStatus(message, type = 'info', isConnectionStatus = false) {
-      const statusElement = isConnectionStatus 
-        ? document.getElementById('connectionStatus')
-        : this.generationStatus;
-        
-      if (!statusElement) {
-        console.error('Status element not found');
+  }
+
+  // Clear history
+  async clearHistory() {
+    // Implementation for clearing history
+    console.log('Clearing history...');
+  }
+
+  // Load history from storage
+  async loadHistory() {
+    try {
+      const data = await new Promise((resolve) => {
+        chrome.storage.local.get(['workflowHistory'], (result) => {
+          resolve(result.workflowHistory || []);
+        });
+      });
+      
+      this.history = data;
+      this.renderHistory();
+      
+    } catch (error) {
+      console.error('Error loading history:', error);
+    }
+  }
+
+  // Render history list
+  renderHistory() {
+    try {
+      const historyList = document.getElementById('historyList');
+      if (!historyList) {
+        console.error('History list element not found');
         return;
       }
+
+      if (!this.history || this.history.length === 0) {
+        historyList.innerHTML = '<div class="empty-state">No workflow history yet. Generate a workflow to see it here.</div>';
+        return;
+      }
+
+      // Clear existing content
+      historyList.innerHTML = '';
+
+      // Create and append history items
+      this.history.forEach((item, index) => {
+        if (!item) return;
+
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+        historyItem.dataset.id = item.id || index;
+
+        // Format date
+        const date = item.timestamp ? new Date(item.timestamp) : new Date();
+        const formattedDate = date.toLocaleString();
+        
+        // Count nodes and connections
+        const nodeCount = item.nodes ? item.nodes.length : 0;
+        const connectionCount = item.connections ? item.connections.length : 0;
+
+        // Create HTML for the history item
+        historyItem.innerHTML = `
+          <div class="history-item-header">
+            <h4>${item.prompt || 'Untitled Workflow'}</h4>
+            <span class="history-item-date">${formattedDate}</span>
+          </div>
+          <div class="history-item-meta">
+            <span class="chip">${item.model || 'gemini-1.5-flash'}</span>
+            <span class="chip">${item.complexity || 'moderate'}</span>
+            <span class="chip">${nodeCount} nodes</span>
+            <span class="chip">${connectionCount} connections</span>
+          </div>
+          <div class="history-item-actions">
+            <button class="btn btn-sm btn-view" data-action="view" data-id="${item.id || index}">
+              <i class="fas fa-eye"></i> View
+            </button>
+            <button class="btn btn-sm btn-delete" data-action="delete" data-id="${item.id || index}">
+              <i class="fas fa-trash"></i>
+            </button>
+          </div>
+        `;
+
+        // Add event listeners for the action buttons
+        const viewBtn = historyItem.querySelector('[data-action="view"]');
+        const deleteBtn = historyItem.querySelector('[data-action="delete"]');
+        
+        if (viewBtn) {
+          viewBtn.addEventListener('click', (e) => this.viewWorkflow(item));
+        }
+        
+        if (deleteBtn) {
+          deleteBtn.addEventListener('click', (e) => this.deleteWorkflow(item.id || index, historyItem));
+        }
+
+        historyList.appendChild(historyItem);
+      });
+    } catch (error) {
+      console.error('Error rendering history:', error);
+      this.showNotification('Failed to load history', 'error');
+    }
+  }
+
+  // View a specific workflow
+  viewWorkflow(workflow) {
+    try {
+      // Create or get the workflow modal
+      let modal = document.getElementById('workflowPreviewModal');
       
-      statusElement.textContent = message;
-      statusElement.className = `status-message ${type}`;
-      this.generationStatus.className = 'status-message';
+      if (!modal) {
+        // Create the modal if it doesn't exist
+        modal = document.createElement('div');
+        modal.id = 'workflowPreviewModal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+          <div class="modal-content">
+            <div class="modal-header">
+              <h3>Workflow Details</h3>
+              <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+              <div class="workflow-preview">
+                <div class="workflow-meta">
+                  <div><strong>Prompt:</strong> ${workflow.prompt || 'N/A'}</div>
+                  <div><strong>Model:</strong> ${workflow.model || 'gemini-1.5-flash'}</div>
+                  <div><strong>Complexity:</strong> ${workflow.complexity || 'moderate'}</div>
+                  <div><strong>Generated on:</strong> ${workflow.timestamp ? new Date(workflow.timestamp).toLocaleString() : 'N/A'}</div>
+                </div>
+                <div class="workflow-tabs">
+                  <button class="tab-button active" data-tab="nodes">Nodes (${workflow.nodes?.length || 0})</button>
+                  <button class="tab-button" data-tab="connections">Connections (${workflow.connections?.length || 0})</button>
+                  <button class="tab-button" data-tab="raw">Raw JSON</button>
+                </div>
+                <div class="tab-content">
+                  <div id="nodes" class="tab-pane active">
+                    ${this.renderNodesPreview(workflow.nodes || [])}
+                  </div>
+                  <div id="connections" class="tab-pane">
+                    ${this.renderConnectionsPreview(workflow.connections || [])}
+                  </div>
+                  <div id="raw" class="tab-pane">
+                    <pre><code>${JSON.stringify(workflow.workflow || {}, null, 2)}</code></pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" id="loadWorkflowBtn">Load in Editor</button>
+              <button class="btn btn-primary" id="copyWorkflowBtn">Copy to Clipboard</button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+
+        // Add tab switching functionality
+        modal.querySelectorAll('.tab-button').forEach(button => {
+          button.addEventListener('click', (e) => {
+            const tabName = e.target.dataset.tab;
+            // Hide all panes
+            modal.querySelectorAll('.tab-pane').forEach(pane => {
+              pane.classList.remove('active');
+            });
+            // Deactivate all buttons
+            modal.querySelectorAll('.tab-button').forEach(btn => {
+              btn.classList.remove('active');
+            });
+            // Show selected pane and activate button
+            document.getElementById(tabName).classList.add('active');
+            e.target.classList.add('active');
+          });
+        });
+
+        // Close modal when clicking the X
+        modal.querySelector('.close-modal').addEventListener('click', () => {
+          modal.style.display = 'none';
+        });
+
+        // Close modal when clicking outside the content
+        window.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.style.display = 'none';
+          }
+        });
+
+        // Load in editor button
+        const loadBtn = modal.querySelector('#loadWorkflowBtn');
+        if (loadBtn) {
+          loadBtn.addEventListener('click', () => this.loadWorkflowInEditor(workflow));
+        }
+
+        // Copy to clipboard button
+        const copyBtn = modal.querySelector('#copyWorkflowBtn');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', () => this.copyWorkflowToClipboard(workflow));
+        }
+      }
+
+
+      // Show the modal
+      modal.style.display = 'block';
       
-      // Remove any existing status classes
-      this.generationStatus.classList.remove('success', 'error', 'info');
+    } catch (error) {
+      console.error('Error viewing workflow:', error);
+      this.showNotification('Failed to load workflow details', 'error');
+    }
+  }
+
+
+  // Render nodes preview
+  renderNodesPreview(nodes) {
+    if (!nodes || nodes.length === 0) {
+      return '<div class="empty-state">No nodes found in this workflow.</div>';
+    }
+
+    return `
+      <div class="nodes-list">
+        ${nodes.map(node => `
+          <div class="node-item">
+            <div class="node-header">
+              <span class="node-type">${node.type || 'Unknown'}</span>
+              <span class="node-id">ID: ${node.id || 'N/A'}</span>
+            </div>
+            <div class="node-params">
+              ${node.parameters ? `
+                <div class="node-params-title">Parameters:</div>
+                <pre>${JSON.stringify(node.parameters, null, 2)}</pre>
+              ` : '<div>No parameters</div>'}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Render connections preview
+  renderConnectionsPreview(connections) {
+    if (!connections || connections.length === 0) {
+      return '<div class="empty-state">No connections found in this workflow.</div>';
+    }
+
+    return `
+      <div class="connections-list">
+        ${connections.map(conn => `
+          <div class="connection-item">
+            <div class="connection-source">
+              <strong>From:</strong> ${conn.source || 'N/A'}
+              ${conn.sourceOutput ? `<span class="connection-io">[${conn.sourceOutput}]</span>` : ''}
+            </div>
+            <div class="connection-arrow">→</div>
+            <div class="connection-target">
+              <strong>To:</strong> ${conn.target || 'N/A'}
+              ${conn.targetInput ? `<span class="connection-io">[${conn.targetInput}]</span>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // Load workflow in editor
+  loadWorkflowInEditor(workflow) {
+    try {
+      // Switch to the generate tab
+      this.switchTab('generate');
       
-      // Add the appropriate status class
-      if (type) {
-        this.generationStatus.classList.add(type);
+      // Set the prompt
+      const promptInput = document.getElementById('workflowPrompt');
+      if (promptInput) {
+        promptInput.value = workflow.prompt || '';
       }
       
-      // Auto-hide after 5 seconds
-      clearTimeout(this.statusTimeout);
-      this.statusTimeout = setTimeout(() => {
-        if (this.generationStatus) {
-          this.generationStatus.textContent = '';
-          this.generationStatus.className = 'status-message';
-        }
-      }, 5000);
+      // Set the complexity
+      const complexitySelect = document.getElementById('workflowComplexity');
+      if (complexitySelect && workflow.complexity) {
+        complexitySelect.value = workflow.complexity;
+      }
+      
+      // Set the model
+      const modelSelect = document.getElementById('model');
+      if (modelSelect && workflow.model) {
+        modelSelect.value = workflow.model;
+      }
+      
+      // Close the modal
+      const modal = document.getElementById('workflowPreviewModal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+      
+      this.showNotification('Workflow loaded. Click Generate to recreate it.', 'info');
+      
+    } catch (error) {
+      console.error('Error loading workflow in editor:', error);
+      this.showNotification('Failed to load workflow in editor', 'error');
     }
   }
   
-  // Initialize the app
-  const app = new WorkflowAIApp();
+  // Copy workflow to clipboard
+  async copyWorkflowToClipboard(workflow) {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(workflow.workflow || {}, null, 2));
+      this.showNotification('Workflow copied to clipboard!', 'success');
+    } catch (error) {
+      console.error('Error copying workflow to clipboard:', error);
+      this.showNotification('Failed to copy workflow', 'error');
+    }
+  }
   
-  // Make app available globally for debugging
-  window.app = app;
+  // Delete a workflow from history
+  async deleteWorkflow(workflowId, element) {
+    try {
+      if (!workflowId) return;
+      
+      // Remove from the array
+      this.history = this.history.filter(item => item.id !== workflowId);
+      
+      // Update storage
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ workflowHistory: this.history }, resolve);
+      });
+      
+      // Remove from UI with animation
+      if (element) {
+        element.style.opacity = '0';
+        setTimeout(() => {
+          element.remove();
+          // If no more items, show empty state
+          if (this.history.length === 0) {
+            this.renderHistory();
+          }
+        }, 300);
+      }
+      
+      this.showNotification('Workflow removed from history', 'success');
+      
+    } catch (error) {
+      console.error('Error deleting workflow:', error);
+      this.showNotification('Failed to delete workflow', 'error');
+    }
+  }
+
+  // Update UI based on current state
+  updateUI() {
+    // Implementation for updating UI
+    console.log('Updating UI...');
+  }
+}
+
+// Initialize the app when the DOM is loaded
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new WorkflowAIApp();
+  // Initialize after the constructor has finished
+  window.app.initialize().catch(error => {
+    console.error('Failed to initialize app:', error);
+  });
 });
